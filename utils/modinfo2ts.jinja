@@ -1,0 +1,254 @@
+
+{% set MAX_VARS= info['MAX_VARS'] %}
+
+import { MODINFO_BASETYPE, hookShowIndentStr, getHookLevelIndentStr, increaseHookLevel, decreaseHookLevel, p2Pointer, p2U32, p2S32, getU8, getU16, getU32, getS8, getS16, getS32, getPointer, getString, getStringWithPointer, resolveSymbol,} from './modinfobase'
+
+
+let base = ptr(0); // avoid frida free allocated buffer 
+
+////////////////////////////////////////////////////////////////////////////////
+// struct type define 
+{% for k, v in  info['structs'].items() %}
+export type {{k}}_struct_type={ 
+
+{% for t in v['fields'] %}
+    {% set name = t['name'] %}
+    {% if name | length >0 %}
+        {{t['name']}}: {{t['langs']['ts']}}, 
+    {% endif %}
+{% endfor %}
+
+};
+{% endfor %}
+
+////////////////////////////////////////////////////////////////////////////////
+// parse struct functions
+{% for k, v in  info['structs'].items() %}
+export let parse_{{k}}= (p:NativePointer):{{k}}_struct_type=>{ 
+    return {
+
+{% for t in v['fields'] %}
+    {% set name = t['name'] %}
+    {% if name | length >0 %}
+        {{t['name']}}: {{t['getFun']}}(p.add({{t['offset']}})), /* {{t['type']}}  @  0x{{ "%0x" | format( t['offset'] ) }} */
+    {% endif %}
+{% endfor %}
+    }
+
+};
+{% endfor %}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// enter/leave function type define 
+{% for k, v in  info['functions'].items() if k in info['symbols'] %}
+    {% set funName = v['funName'] %}
+    {% set ts_args = v['ts_args'] %}
+    {% set c_args  = v['c_args' ] %}
+    export type {{funName}}_hookopts={ 
+            hide? : boolean,
+
+            enterFun?:(thiz:InvocationContext, tstr:string, {{ts_args | join(', ') }})=>void, 
+            {% if v['return']['type'] != 'void' %}
+                leaveFun?:(thiz:InvocationContext, tstr:string, retval:NativePointer, {{ ts_args | join(', ') }})=>NativePointer|void,
+            {% else %}
+                leaveFun?:(thiz:InvocationContext, tstr:string, {{ ts_args | join(', ') }})=>void,
+            {% endif %}
+    };
+
+{% endfor %}
+
+export type INFO_TYPE  = {
+    
+    name    : string,
+
+    base    : NativePointer,
+
+{% if 'cave_offset' in info %}
+    cave    : NativePointer,
+{% endif %}
+
+    symbols     : {
+        {% for k, v in  info['symbols'].items() %}
+        {{k}}: NativePointer,
+        {% endfor %}
+    },
+
+    hookids : {
+        {% for k, v in  info['functions'].items() if k in info['symbols'] %}
+        {{v['funName']}}_hookid : null | InvocationListener ,
+        {% endfor %}
+    },
+
+    functions : {
+        {% for k, v in  info['functions'].items() if k in info['symbols'] %}
+            {% set funName = v['funName'] %}
+            {% set ts_args = v['ts_args'] %}
+            {% set c_args  = v['c_args' ] %}
+            /* {{v['return']['type']}} {{funName}} ( {{  c_args| join(', ')   }} ) ; */
+            {{funName}}:{ 
+                call : ( {{  ts_args | join(', ')  }})=>{{ v['return']['langs']['ts']}},
+
+                hook:( opts?:{{funName}}_hookopts )=>void,
+
+                unhook:()=>void,
+
+            },
+
+        {% endfor %}
+    },
+
+    variables : {
+    },
+
+};
+
+export let mod  = {
+
+{% if info['mode'] == 'load' %}
+        load: (libs?: (MODINFO_BASETYPE|string)[], syms?:{[key:string]:NativePointer}):INFO_TYPE=>{
+
+            base = Memory.alloc({{  info['load_size']  }});
+            console.log('base', base);
+            Memory.protect(base, {{info['load_size']}}, 'rwx');
+
+            ////////////////////////////////////////////////////////////////////////////////
+            // load content
+        {% for t in  info['loads'] %}
+            base.add({{t['virtual_address']}}).writeByteArray([{{t['content_ts']}}]);
+        {% endfor %}
+
+            ////////////////////////////////////////////////////////////////////////////////
+            // handle relocation
+            {% for t in  info['patches'] %} {{t}}  
+            {% endfor %}
+
+        ////////////////////////////////////////////////////////////////////////////////
+        // initialize codes
+        
+    {% for t in  info['inits'] %} {{ t }}
+    {% endfor %}
+    
+    {% if 'name' in info and info['name'] | length >0 %}
+        let name = '{{ info["name"]}}'; 
+    {% else %}
+        'name' is not in info with load mode
+    {% endif %}
+
+{% elif info['mode'] == 'get' %}
+
+
+{% if 'name' in info and info['name'] | length >0 %}
+    get: (soname?:string):INFO_TYPE=>{
+
+        let name = '{{ info["name"]}}'; 
+        if(soname!=undefined) name = soname;
+{% else %}
+    get: (soname:string):INFO_TYPE=>{
+        let name = soname;
+{% endif %}
+
+        base = Process.getModuleByName(name).base;
+
+{% endif %}
+
+        const ___info:INFO_TYPE = {
+
+            name : name,
+
+            base : base,
+
+        {% if 'cave_offset' in info %}
+            cave : base.add({{info['cave_offset']}}),
+        {% endif %}
+
+            symbols     : {
+    {% for k, v in  info['symbols'].items() %}
+        {% if 'offset' in v %}
+            {{k}}: base.add({{v['offset']}}),
+        {% else %}
+            {{k}}: Module.getExportByName(name, '{{k}}'),
+        {% endif %}
+     {% endfor %}
+            },
+
+            hookids : {
+            {% for k, v in  info['functions'].items() if k in info['symbols'] %}
+                {{v['funName']}}_hookid : null ,
+            {% endfor %}
+            },
+
+            functions   :{
+        {% for k, v in  info['functions'].items() if k in info['symbols'] %}
+            {% set funName = v['funName'] %}
+            {% set is_void = v['is_void'] %}
+            {% set ts_args          = v['ts_args'        ] %}
+            {% set frida_names      = v['frida_names'    ] %}
+            {% set c_args           = v['c_args'         ] %}
+            {% set frida_args       = v['frida_args'     ] %}
+            {% set save_args_code   = v['save_args_code' ] %}
+            {% set show_args_code   = v['show_args_code' ] %}
+            {% set this_names       = v['this_names'     ] %}
+                /* {{v['return']['type']}} {{funName}} ( {{  c_args| join(', ')   }} ) ; */
+
+                {{funName}}:{ 
+                    call : function( {{  ts_args | join(', ')  }}){ 
+                        {% if v['is_variadic'] %}
+                        const targs:NativePointer[] = [ {% for t in range(MAX_VARS) %} ptr(0), {% endfor %} ]; for (let t = 0; t<args.length && t<{{MAX_VARS}}; t++) targs[t]=args[t]; 
+                        {% endif %}
+                        return  new NativeFunction(___info.symbols.{{k}}, {{v['return']['langs']['frida'] | tojson}}, [{{frida_args | join(', ')}} ])({{frida_names | join(', ')}});
+                    },
+                    
+                    hook:( opts?:{{funName}}_hookopts)=>{
+                        let hide:boolean = false;
+                        if(opts?.hide!=undefined) hide = opts.hide;
+
+                        if(___info.hookids.{{funName}}_hookid!=null){ throw Error ('rehook {{funName}}') }
+
+                        ___info.hookids.{{funName}}_hookid  = Interceptor.attach(___info.symbols.{{k}}, {
+                            onEnter(args) {
+                                {{ save_args_code | join(' ')}}
+                                this.indentStr = getHookLevelIndentStr();
+                                if(!hide){
+                                    console.log(this.indentStr,  '+ {{funName}}', {{ show_args_code | join(", ',' , ")}} ) ;
+                                }
+                                if(opts?.enterFun!=undefined) opts.enterFun(this, this.indentStr, {{ this_names | join(', ')}});
+                                increaseHookLevel();
+                            },
+
+                            onLeave(retval) {
+                                if(!hide){
+                                    console.log(this.indentStr,  '- {{funName}}', retval);
+                                }
+                                if(opts?.leaveFun!=undefined){
+                                {% if not is_void %}
+                                    let userRet = opts.leaveFun(this, this.indentStr, retval,  {{ this_names | join(', ')}});
+                                    if(userRet!=undefined) retval.replace(userRet);
+                                {% else %}
+                                    opts.leaveFun(this, this.indentStr, {{ this_names | join(', ')}});
+                                {% endif %}
+                                } 
+                                decreaseHookLevel(); 
+                            },
+                        });
+
+                    },
+
+                    unhook:()=>{
+                        if(___info.hookids.{{funName}}_hookid==null){ throw Error ('{{funName}} have not been hooked') }
+
+                        ___info.hookids.{{funName}}_hookid.detach();
+
+                    },
+                },
+            {% endfor %}
+            },
+
+            variables : {
+            },
+
+        };
+        return ___info;
+    },
+
+}
