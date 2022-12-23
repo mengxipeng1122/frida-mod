@@ -4,6 +4,7 @@ import { mod as libcmodinfo } from './modinfos/libc'
 import { mod as liblinux_x64info  } from './modinfos/liblinux_x64'
 import { mod as liblinux_x86info  } from './modinfos/liblinux_x86'
 import { mod as libarm64info  } from './modinfos/libarm64'
+import { mod as libarm32info  } from './modinfos/libarm32'
 
 const _frida_puts = new NativeCallback(function(s:NativePointer){
     console.log(s.readUtf8String());
@@ -80,6 +81,27 @@ const test_arm64 = ()=>{
     }
 }
 
+const test_arm32 = ()=>{
+    {
+        testLibcSprintf('libc.so')
+    }
+    {
+        let lib = libarm32info.load([],{
+
+            _frida_puts                 : _frida_puts,
+
+            _ITM_registerTMCloneTable   : ptr(0),
+            _ITM_deregisterTMCloneTable : ptr(0),
+            __gmon_start__              : ptr(0),
+            __cxa_call_unexpected       : ptr(0),
+            __cxa_begin_cleanup         : ptr(0),
+            __cxa_type_match            : ptr(0),
+        });
+        testlibAdd(lib);
+    }
+}
+
+
 
 
 console.log("##################################################")
@@ -92,6 +114,9 @@ else if (Process.arch=='ia32' && Process.platform=='linux') {
 }
 else if (Process.arch=='arm64' && Process.platform=='linux') {
     test_arm64();
+}
+else if (Process.arch=='arm' && Process.platform=='linux') {
+    test_arm32();
 }
 else{
     throw 'unhandle test'
