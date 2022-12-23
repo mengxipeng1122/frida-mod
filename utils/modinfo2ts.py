@@ -331,17 +331,19 @@ def handleELF(info, binary, no_content=False):
         typ         = rel.type;
         address     = rel.address
         sym_name    = rel.symbol.name
-        if      typ == int(lief.ELF.RELOCATION_ARM.RELATIVE  )  \
-           or   typ == int(lief.ELF.RELOCATION_i386.RELATIVE )  \
-           or   typ == int(lief.ELF.RELOCATION_X86_64.R64    )  :
+        if      typ == int(lief.ELF.RELOCATION_ARM.RELATIVE     )  \
+           or   typ == int(lief.ELF.RELOCATION_i386.RELATIVE    )  \
+           or   typ == int(lief.ELF.RELOCATION_AARCH64.RELATIVE )  \
+           or   typ == int(lief.ELF.RELOCATION_X86_64.R64       )  :
             code = f'base.add({hex(address)}).writePointer(base.add({hex(address)}).readPointer().add(base));'
 
-        elif typ == int(lief.ELF.RELOCATION_ARM.GLOB_DAT  ) \
-          or typ == int(lief.ELF.RELOCATION_ARM.JUMP_SLOT ) \
-          or typ == int(lief.ELF.RELOCATION_ARM.ABS32     ) \
-          or typ == int(lief.ELF.RELOCATION_ARM.REL32     ) \
-          or typ == int(lief.ELF.RELOCATION_i386.JUMP_SLOT) \
-          or typ == int(lief.ELF.RELOCATION_i386.GLOB_DAT ) :
+        elif typ == int(lief.ELF.RELOCATION_ARM.GLOB_DAT        ) \
+          or typ == int(lief.ELF.RELOCATION_AARCH64.JUMP_SLOT   ) \
+          or typ == int(lief.ELF.RELOCATION_ARM.JUMP_SLOT       ) \
+          or typ == int(lief.ELF.RELOCATION_ARM.ABS32           ) \
+          or typ == int(lief.ELF.RELOCATION_ARM.REL32           ) \
+          or typ == int(lief.ELF.RELOCATION_i386.JUMP_SLOT      ) \
+          or typ == int(lief.ELF.RELOCATION_i386.GLOB_DAT       ) :
             # try to found symbol
             foundSym = sym_name in info['symbols'];
             if not foundSym:
