@@ -3,6 +3,7 @@
 
 #include "frida_funs.h"
 
+
 static void __attribute__((constructor)) init (void)
 {
     _frida_puts(" run constructor function in module ");

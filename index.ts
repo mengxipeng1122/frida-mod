@@ -5,6 +5,8 @@ import { mod as liblinux_x64info  } from './modinfos/liblinux_x64'
 import { mod as liblinux_x86info  } from './modinfos/liblinux_x86'
 import { mod as libarm64info  } from './modinfos/libarm64'
 import { mod as libarm32info  } from './modinfos/libarm32'
+import { mod as libwin64info  } from './modinfos/libwin64'
+import { mod as libwin32info  } from './modinfos/libwin32'
 
 const _frida_puts = new NativeCallback(function(s:NativePointer){
     console.log(s.readUtf8String());
@@ -101,6 +103,43 @@ const test_arm32 = ()=>{
     }
 }
 
+const test_win64 = ()=>{
+    {
+        testLibcSprintf('ntdll.dll')
+    }
+    {
+        let lib = libwin64info.load([],{
+
+            _frida_puts                 : _frida_puts,
+
+            DeleteCriticalSection          : Module.getExportByName(null,'RtlDeleteCriticalSection') , 
+            EnterCriticalSection           : Module.getExportByName(null,'RtlEnterCriticalSection'),  
+            InitializeCriticalSection      : Module.getExportByName(null,'RtlInitializeCriticalSection'), 
+            LeaveCriticalSection           : Module.getExportByName(null,'RtlLeaveCriticalSection'),
+
+        });
+        testlibAdd(lib);
+    }
+}
+
+const test_win32 = ()=>{
+    {
+        testLibcSprintf('ntdll.dll')
+    }
+    {
+        let lib = libwin32info.load([],{
+
+            _frida_puts                 : _frida_puts,
+
+            DeleteCriticalSection          : Module.getExportByName(null,'RtlDeleteCriticalSection') , 
+            EnterCriticalSection           : Module.getExportByName(null,'RtlEnterCriticalSection'),  
+            InitializeCriticalSection      : Module.getExportByName(null,'RtlInitializeCriticalSection'), 
+            LeaveCriticalSection           : Module.getExportByName(null,'RtlLeaveCriticalSection'),
+
+        });
+        testlibAdd(lib);
+    }
+}
 
 
 
@@ -117,6 +156,12 @@ else if (Process.arch=='arm64' && Process.platform=='linux') {
 }
 else if (Process.arch=='arm' && Process.platform=='linux') {
     test_arm32();
+}
+else if (Process.arch=='x64' && Process.platform=='windows') {
+    test_win64();
+}
+else if (Process.arch=='ia32' && Process.platform=='windows') {
+    test_win32();
 }
 else{
     throw 'unhandle test'

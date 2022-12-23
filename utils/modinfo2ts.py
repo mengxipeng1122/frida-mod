@@ -420,11 +420,11 @@ def handlePE(info, binary, no_content=False):
             typ = entry.type
             address = entry.address;
             #print(t, tt, typ)
-            if typ == lief.PE.RELOCATIONS_BASE_TYPES.ABSOLUTE:
-                pass
+            if typ == lief.PE.RELOCATIONS_BASE_TYPES.ABSOLUTE: pass
+            elif typ == lief.PE.RELOCATIONS_BASE_TYPES.DIR64: pass
             elif typ == lief.PE.RELOCATIONS_BASE_TYPES.HIGHLOW:
                 code = f'base.add({hex(address)}).writePointer(base.add({hex(address)}).readPointer().add(base.sub({hex(imagebase)})));'
-                patches.append(code+f';console.log("{len(patches)}");')
+                patches.append(code)
             else:
                 #print(t,tt, entry, int(lief.PE.RELOCATIONS_BASE_TYPES.HIGHLOW), typ)
                 raise Exception(f'unhandled PE relocation type {typ}' )
@@ -437,7 +437,7 @@ def handlePE(info, binary, no_content=False):
             address = entry.iat_address;
             sym_name = entry.name;
             code = f"base.add({hex(address)}).writePointer(resolveSymbol('{sym_name}', libs, syms));"
-            patches.append(code+f';console.log("{len(patches)}");')
+            patches.append(code)
 
     info['patches'] = patches
 
