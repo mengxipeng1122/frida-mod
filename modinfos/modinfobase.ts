@@ -12,6 +12,8 @@ export type HOOKID = null | InvocationListener;
 
 export type MODINFO_BASETYPE = {
 
+    unload? : ()=>void;
+
     name    : string, 
 
     base    : NativePointer,

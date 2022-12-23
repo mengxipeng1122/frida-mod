@@ -59,6 +59,11 @@ export let parse_{{k}}= (p:NativePointer):{{k}}_struct_type=>{
 {% endfor %}
 
 export type INFO_TYPE  = {
+
+{% if info['mode'] == 'load' %}
+    unload  : ()=>void,
+{% endif %}
+
     
     name    : string,
 
@@ -103,6 +108,17 @@ export type INFO_TYPE  = {
 
 };
 
+const mod_init  = (base:NativePointer)=>{
+    // initialize codes
+    {% for t in  info['inits'] %} {{ t }}
+    {% endfor %}
+}
+
+const mod_deinit  = (base:NativePointer)=>{
+    {% for t in  info['deinits'] %} {{ t }}
+    {% endfor %}
+}
+
 export let mod  = {
 
 {% if info['mode'] == 'load' %}
@@ -123,11 +139,9 @@ export let mod  = {
             {% for t in  info['patches'] %} {{t}}  
             {% endfor %}
 
-        ////////////////////////////////////////////////////////////////////////////////
-        // initialize codes
+            ////////////////////////////////////////////////////////////////////////////////
+            mod_init(base);
         
-    {% for t in  info['inits'] %} {{ t }}
-    {% endfor %}
     
     {% if 'name' in info and info['name'] | length >0 %}
         let name = '{{ info["name"]}}'; 
@@ -153,6 +167,20 @@ export let mod  = {
 {% endif %}
 
         const ___info:INFO_TYPE = {
+
+{% if info['mode'] == 'load' %}
+            unload:()=>{
+                //unhook 
+        {% for k, v in  info['functions'].items() if k in info['symbols'] %}
+            {% set funName = v['funName'] %}
+                if(___info.hookids.{{funName}}_hookid!=null){ ___info.hookids.{{funName}}_hookid.detach(); ___info.hookids.{{funName}}_hookid=null; }
+        {% endfor %}
+                mod_deinit(base);
+
+                // free
+                base=ptr(0);
+            },
+{% endif %}
 
             name : name,
 
@@ -238,6 +266,7 @@ export let mod  = {
                         if(___info.hookids.{{funName}}_hookid==null){ throw Error ('{{funName}} have not been hooked') }
 
                         ___info.hookids.{{funName}}_hookid.detach();
+                        ___info.hookids.{{funName}}_hookid=null;
 
                     },
                 },
