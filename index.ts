@@ -158,7 +158,7 @@ else if (Process.arch=='arm' && Process.platform=='linux') {
     test_arm32();
 }
 else if (Process.arch=='x64' && Process.platform=='windows') {
-    test_win64();
+    test_win64(); // have a  issue whe call function in win64.dll
 }
 else if (Process.arch=='ia32' && Process.platform=='windows') {
     test_win32();
