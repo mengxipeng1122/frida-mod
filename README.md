@@ -78,3 +78,5 @@ make run_win64
 # start `win32.exe` on your windows machine.
 make run_win32
 ```
+
+# [blog](http://mengxipeng1122.github.io/2022/12/24/frida-mod-tutorial/)
