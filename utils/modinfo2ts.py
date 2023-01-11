@@ -537,9 +537,9 @@ def main():
 
     else:
         for k, v in info['functions'].items():
-            info['symbols'][k] = {};
+            if k not in info['symbols']: info['symbols'][k] = {};
         for k, v in info['variables'].items():
-            info['symbols'][k] = {};
+            if k not in info['symbols']: info['symbols'][k] = {};
 
     # handle same function game
     funMap = {} # key == function name, value == list of symbol names
