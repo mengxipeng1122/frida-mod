@@ -339,6 +339,8 @@ def handleELF(info, binary, no_content=False):
 
         elif typ == int(lief.ELF.RELOCATION_ARM.GLOB_DAT        ) \
           or typ == int(lief.ELF.RELOCATION_AARCH64.JUMP_SLOT   ) \
+          or typ == int(lief.ELF.RELOCATION_AARCH64.ABS64       ) \
+          or typ == int(lief.ELF.RELOCATION_AARCH64.GLOB_DAT    ) \
           or typ == int(lief.ELF.RELOCATION_ARM.JUMP_SLOT       ) \
           or typ == int(lief.ELF.RELOCATION_ARM.ABS32           ) \
           or typ == int(lief.ELF.RELOCATION_ARM.REL32           ) \
