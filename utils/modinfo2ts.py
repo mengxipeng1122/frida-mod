@@ -24,6 +24,10 @@ def fixFunctionName(n):
     n = n.replace('[]','')
     return n;
 
+def fixArugmentName(n):
+    n = n.replace(':','_')
+    return n;
+
 def preprocessType(t):
     t=t.replace('const','')
     t=t.strip();
@@ -206,7 +210,7 @@ def updateAllFunctions(tu, funcs={}):
                 args.append( ( aa.type.get_canonical().spelling, aa.spelling) )
             for typ, name in args:
                 info['arguments'].append({
-                    'name' : name, 
+                    'name' : fixArugmentName(name), 
                     'type' : typ,
                     'langs': {
                         'ts'    : type2TypeScript(typ),
@@ -236,7 +240,7 @@ def updateAllStructs(tu, strs={}):
                 typ = aa.type.get_canonical().spelling;
                 info['fields'].append({
                     'type' : typ,
-                    'name' : aa.spelling,
+                    'name' : fixArugmentName( aa.spelling ),
                     'langs': {
                         'ts'    : type2TypeScript(typ),
                         'frida' : type2Frida(typ),
@@ -559,6 +563,7 @@ def main():
     # write output file
     #for k, v in info['functions'].items():
     #    if k.find('CheckInput')>=0: print(k,v)
+    #json.dump(info, open('/tmp/info.json','w'))
     module_path = os.path.dirname(os.path.abspath(__file__))
     templateFn = os.path.join(module_path, 'modinfo2ts.jinja')
     t = Template(open(templateFn).read())
