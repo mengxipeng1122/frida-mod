@@ -1,0 +1,190 @@
+
+
+{% set MAX_VARS= info['MAX_VARS'] %}
+
+import { MODINFO_BASETYPE, hookShowIndentStr, getHookLevelIndentStr, increaseHookLevel, decreaseHookLevel, p2Pointer, p2U32, p2S32, getU8, getU16, getU32, getS8, getS16, getS32, getPointer, getString, getStringWithPointer, resolveSymbol,} from './modinfobase'
+
+
+{% set comments = info['comments'] %} 
+
+////////////////////////////////////////////////////////////////////////////////
+// enter/leave function type define 
+{% for v in  info['functions'] %}
+    {% set funName = v['name'   ] %}
+    {% set ts_args = v['ts_args'] %}
+    {% set ts_ret  = v['ts_ret' ] %}
+    {% set is_void = v['is_void'           ] %}
+    /* {{ v['signature']  }} @ {{ v['address'] }}*/
+    export type {{funName}}_hookopts={ 
+            hide? : boolean,
+
+            enterFun?:(thiz:InvocationContext, tstr:string, {{ts_args | join(', ') }})=>void, 
+            {% if not is_void %}
+                leaveFun?:(thiz:InvocationContext, tstr:string, retval:NativePointer, {{ ts_args | join(', ') }})=>NativePointer|void,
+            {% else %}
+                leaveFun?:(thiz:InvocationContext, tstr:string, {{ ts_args | join(', ') }})=>void,
+            {% endif %}
+    };
+{% endfor %}
+
+
+export type INFO_TYPE  = {
+
+    name    : string,
+
+    base    : NativePointer,
+
+    hookids : {
+        {% for   v in  info['functions'] %}
+        {% set funName = v['name'   ] %}
+        {{ funName }}_hookid : null | InvocationListener ,
+        {% endfor %}
+    },
+
+    symbolMap : {[key:string]:NativePointer},
+
+    functions : {
+        {% for   v in  info['functions'] %}
+            {% set funName      = v['name'      ] %}
+            {% set ts_args      = v['ts_args'   ] %}
+            {% set ts_ret       = v['ts_ret'    ] %}
+            {% set c_args       = v['c_args'    ] %}
+            {% set signature    = v['signature' ] %}
+            /* {{ signature }} ; */
+            {{funName}}:{ 
+                call : ( {{  ts_args | join(', ')  }})=>{{ ts_ret }},
+
+                hook:( opts?:{{funName}}_hookopts )=>void,
+
+                unhook:()=>void,
+
+            },
+
+        {% endfor %}
+    },
+
+
+
+};
+
+export let mod  = {
+
+
+{% if 'name' in info and info['name'] | length >0 %}
+    get: (soname?:string):INFO_TYPE=>{
+
+        let name = '{{ info["name"]}}'; 
+        if(soname!=undefined) name = soname;
+{% else %}
+    get: (soname:string):INFO_TYPE=>{
+        let name = soname;
+{% endif %}
+
+        let base = Process.getModuleByName(name).base;
+
+
+        const ___info:INFO_TYPE = {
+
+            name : name,
+
+            base : base,
+
+            hookids : {
+            {% for   v in  info['functions'] %}
+                {% set funName      = v['name'      ] %}
+                {{funName}}_hookid : null ,
+            {% endfor %}
+            },
+
+            symbolMap: {
+            {% for   v in  info['functions'] %}
+                {% set funName      = v['name'      ] %}
+                {% set address      = v['address'   ] %}
+                {{funName}}  : base.add({{address}}),
+            {% endfor %}
+
+            },
+
+            functions   :{
+        {% for   v in  info['functions'] %}
+
+
+            {% set funName          = v['name'              ] %}
+            {% set is_void          = v['is_void'           ] %}
+            {% set address          = v['address'           ] %}
+            {% set ts_args          = v['ts_args'           ] %}
+            {% set ts_ret           = v['ts_ret'            ] %}
+            {% set frida_ret        = v['ts_ret'            ] %}
+            {% set c_args           = v['c_args'            ] %}
+            {% set signature        = v['signature'         ] %}
+            {% set is_void          = v['is_void'           ] %}
+            {% set frida_names      = v['frida_names'       ] %}
+            {% set c_args           = v['c_args'            ] %}
+            {% set frida_args       = v['frida_args'        ] %}
+            {% set save_args_code   = v['save_args_code'    ] %}
+            {% set show_args_code   = v['show_args_code'    ] %}
+            {% set this_names       = v['this_names'        ] %}
+                /* {{ signature }} ; */
+
+{%if info['comments'] %} /* {%endif%}
+                {{funName}}:{ 
+                    call : function( {{  ts_args | join(', ')  }}){ 
+                        {% if v['is_variadic'] %}
+                        const targs:NativePointer[] = [ {% for t in range(MAX_VARS) %} ptr(0), {% endfor %} ]; for (let t = 0; t<args.length && t<{{MAX_VARS}}; t++) targs[t]=args[t]; 
+                        {% endif %}
+                        return  new NativeFunction(base.add({{address}}), {{v['frida_ret'] | tojson}}, [{{frida_args | join(', ')}} ])({{frida_names | join(', ')}});
+                    },
+                    
+                    hook:( opts?:{{funName}}_hookopts)=>{
+                        let hide:boolean = false;
+                        if(opts?.hide!=undefined) hide = opts.hide;
+
+                        if(___info.hookids.{{funName}}_hookid!=null){ throw Error ('rehook {{funName}}') }
+
+                        ___info.hookids.{{funName}}_hookid  = Interceptor.attach(base.add({{address}}), {
+                            onEnter(args) {
+                                {{ save_args_code | join(' ')}}
+                                this.indentStr = getHookLevelIndentStr();
+                                if(!hide){
+                                    console.log(this.indentStr,  '+ {{funName}}', {{ show_args_code | join(", ',' , ")}} ) ;
+                                }
+                                if(opts?.enterFun!=undefined) opts.enterFun(this, this.indentStr, {{ this_names | join(', ')}});
+                                increaseHookLevel();
+                            },
+
+                            onLeave(retval) {
+                                if(!hide){
+                                    console.log(this.indentStr,  '- {{funName}}', retval);
+                                }
+                                if(opts?.leaveFun!=undefined){
+                                {% if not is_void %}
+                                    let userRet = opts.leaveFun(this, this.indentStr, retval,  {{ this_names | join(', ')}});
+                                    if(userRet!=undefined) retval.replace(userRet);
+                                {% else %}
+                                    opts.leaveFun(this, this.indentStr, {{ this_names | join(', ')}});
+                                {% endif %}
+                                } 
+                                decreaseHookLevel(); 
+                            },
+                        });
+
+                    },
+
+                    unhook:()=>{
+                        if(___info.hookids.{{funName}}_hookid==null){ throw Error ('{{funName}} have not been hooked') }
+
+                        ___info.hookids.{{funName}}_hookid.detach();
+                        ___info.hookids.{{funName}}_hookid=null;
+
+                    },
+                },
+{%if info['comments'] %} */ {%endif%}
+
+            {% endfor %}
+            },
+
+        };
+        return ___info;
+    },
+
+}

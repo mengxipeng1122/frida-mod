@@ -1,0 +1,21 @@
+
+#pragma once 
+
+
+////////////////////////////////////////////////////////////////////////////////
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+{% for v in  info['functions'] %}
+    {% set funName = v['name'   ] %}
+    {% set c_args  = v['c_args' ] %}
+    {% set c_ret   = v['c_ret'  ] %}
+    {% set is_void = v['is_void'           ] %}
+    /* {{ v['signature']  }} @ {{ v['address'] }}*/
+    {{c_ret}} {{funName}} ( {{c_args | join(', ') }}  );
+{% endfor %}
+
+#ifdef __cplusplus
+}
+#endif
