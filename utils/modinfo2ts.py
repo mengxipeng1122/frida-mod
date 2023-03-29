@@ -479,6 +479,7 @@ def main():
     parser.add_argument('-n', '--name',type=str, help='set module name' )
     parser.add_argument('-m', '--mode', default='get', nargs='?', choices=['get', 'load',], help='modes (default: %(default)s)')
     parser.add_argument('--no-content', action='store_true', default=False)
+    parser.add_argument('-P', '--cxx', action='store_true', default=False)
     parser.add_argument('-F', '--flags', nargs='*', type=str, default=[])
     parser.add_argument("source", type=str, nargs='+', help='source files');
 
@@ -523,9 +524,16 @@ def main():
     ##################################################
     # parse the source file 
     index = Index.create()
+    parseArgs = []
+    if args.cxx:
+        parseArgs = ['-x', 'c++', '-std=c++11']
+    else:
+        parseArgs = ['-x', 'c', '-std=c99']
+    for b in args.flags:
+        parseArgs.append(f'-{b}')
     for src in args.source:
         print(f'parsing {src} ... ')
-        tu = index.parse(src, [f'-{b}' for b in args.flags])
+        tu = index.parse(src, parseArgs)
         if not tu: parser.error(f"unable to load input {args.source}")
         updateAllFunctions(tu,  info['functions'])
         updateAllStructs(tu,    info['structs'  ])

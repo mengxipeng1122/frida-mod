@@ -153,12 +153,12 @@ export let mod  = {
 
 
 {% if 'name' in info and info['name'] | length >0 %}
-    get: (soname?:string):INFO_TYPE=>{
+    get: (soname?:string, libs?: (MODINFO_BASETYPE|string)[], syms?:{[key:string]:NativePointer}):INFO_TYPE=>{
 
         let name = '{{ info["name"]}}'; 
         if(soname!=undefined) name = soname;
 {% else %}
-    get: (soname:string):INFO_TYPE=>{
+    get: (soname:string, libs?: (MODINFO_BASETYPE|string)[], syms?:{[key:string]:NativePointer}):INFO_TYPE=>{
         let name = soname;
 {% endif %}
 
@@ -195,7 +195,7 @@ export let mod  = {
         {% if 'offset' in v %}
             {{k}}: base.add({{v['offset']}}),
         {% else %}
-            {{k}}: Module.getExportByName(name, '{{k}}'),
+            {{k}}: Module.findExportByName(name, '{{k}}') ?? resolveSymbol('{{k}}', libs, syms),
         {% endif %}
      {% endfor %}
             },
