@@ -423,7 +423,7 @@ extern "C" int printv(char* fmt, ...)
     static  char buff[BUFSZ];
     va_list ap;
     va_start(ap, fmt);
-    auto size = vsnprintf(buff, BUFSZ, fmt, ap);
+    size_t size = vsnprintf(buff, BUFSZ, fmt, ap);
 #if LOG_OUTPUT == USING_PRINTF_LOG
 #elif LOG_OUTPUT == USING_FRIDA_LOG
     _frida_log(buff);

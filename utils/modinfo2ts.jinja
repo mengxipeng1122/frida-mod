@@ -1,7 +1,27 @@
 
 {% set MAX_VARS= info['MAX_VARS'] %}
 
-import { MODINFO_BASETYPE, hookShowIndentStr, getHookLevelIndentStr, increaseHookLevel, decreaseHookLevel, p2Pointer, p2U32, p2S32, getU8, getU16, getU32, getS8, getS16, getS32, getPointer, getString, getStringWithPointer, resolveSymbol,} from './modinfobase'
+import { 
+    MODINFO_BASETYPE, 
+    hookShowIndentStr, 
+    getHookLevelIndentStr, 
+    increaseHookLevel, 
+    decreaseHookLevel, 
+    p2Pointer, 
+    p2U32, 
+    p2S32, 
+    getU8, 
+    getU16, 
+    getU32, 
+    getS8, 
+    getS16, 
+    getS32, 
+    getPointer, 
+    getString, 
+    getStringWithPointer, 
+    resolveSymbol,
+    readFileData,
+} from './modinfobase'
 
 
 let base = ptr(0); // avoid frida free allocated buffer 
@@ -122,7 +142,11 @@ const mod_deinit  = (base:NativePointer)=>{
 export let mod  = {
 
 {% if info['mode'] == 'load' %}
+    {% if info['no_content'] %}
+        load: (sopath:string, libs?: (MODINFO_BASETYPE|string)[], syms?:{[key:string]:NativePointer}):INFO_TYPE=>{
+    {% else %}
         load: (libs?: (MODINFO_BASETYPE|string)[], syms?:{[key:string]:NativePointer}):INFO_TYPE=>{
+    {% endif %}
 
             base = Memory.alloc({{  info['load_size']  }});
             console.log('base', base);
@@ -130,9 +154,15 @@ export let mod  = {
 
             ////////////////////////////////////////////////////////////////////////////////
             // load content
+    {% if info['no_content'] %}
+        {% for t in  info['loads'] %}
+            base.add({{t['virtual_address']}}).writeByteArray(readFileData(sopath, {{t['size']}}, {{t['file_offset']}}));
+        {% endfor %}
+    {% else %}
         {% for t in  info['loads'] %}
             base.add({{t['virtual_address']}}).writeByteArray([{{t['content_ts']}}]);
         {% endfor %}
+    {% endif %}
 
             ////////////////////////////////////////////////////////////////////////////////
             // handle relocation

@@ -487,13 +487,16 @@ def main():
     print(args)
 
     info = {
-        'MAX_VARS' : MAX_VARS,
 
-        'mode' : args.mode,
+        'MAX_VARS'      : MAX_VARS,
 
-        'name':"",
+        'no_content'    : args.no_content,
 
-        'symbols':{
+        'mode'          : args.mode,
+
+        'name'          : "",
+
+        'symbols'       : {
             #  '<name>' : {'offset': <offset>,  },
          },
 
@@ -512,6 +515,7 @@ def main():
         'relocations'   : [],
 
         'ctors'         : [],
+
     }
 
     if args.binary!=None: info['name'] = os.path.basename(args.binary);
