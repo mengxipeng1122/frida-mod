@@ -104,8 +104,21 @@ export let resolveSymbol = (name:string, libs?:(MODINFO_BASETYPE|string)[], syms
         for(let t = 0; t<libs.length; t++){
             const lib = libs[t];
             if(typeof(lib)=='string'){
-                let e = Module.findExportByName(lib, name);
-                if(e!=null) return e;
+                let ret:NativePointer|null = null;
+                Process.getModuleByName(lib)
+                    .enumerateExports()
+                    .forEach(e=>{
+                        if(ret != null) return;
+                        if(e.name == name){ ret = e.address; }
+                    })
+                if(ret!=null) return ret;
+                Process.getModuleByName(lib)
+                    .enumerateSymbols()
+                    .forEach(e=>{
+                        if(ret != null) return;
+                        if(e.name == name){ ret = e.address; }
+                    })
+                if(ret!=null) return ret;
             }
             else{
                 let e = Module.findExportByName(lib.name, name);

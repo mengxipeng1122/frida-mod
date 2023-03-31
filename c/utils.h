@@ -42,7 +42,7 @@
     
     #define LOG_INFO(fmt, args...)  LOG_INFOS_WITH_N(0x800, fmt, ##args)
     
-    #define LOG_ERR(fmt, args...)                                        \
+    #define LOG_ERR(fmt, args...)                                         \
     do{                                                                   \
         LOG_INFOS_WITH_N(0x800, fmt, ##args);                             \
         _frida_err();                                                     \
