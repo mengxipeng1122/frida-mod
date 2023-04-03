@@ -126,11 +126,14 @@ export type INFO_TYPE  = {
     variables : {
     },
 
+    inits?:NativePointer[];
+
+
 };
 
 const mod_init  = (base:NativePointer)=>{
     // initialize codes
-    {% for t in  info['inits'] %} {{ t }}
+    {% for t in  info['inits'] %} new NativeFunction(base.add({{t}}), 'void', [])();
     {% endfor %}
 }
 
@@ -143,10 +146,12 @@ export let mod  = {
 
 {% if info['mode'] == 'load' %}
     {% if info['no_content'] %}
-        load: (sopath:string, libs?: (MODINFO_BASETYPE|string)[], syms?:{[key:string]:NativePointer}):INFO_TYPE=>{
+        load: (sopath:string, libs?: (MODINFO_BASETYPE|string)[], syms?:{[key:string]:NativePointer}, init?:boolean):INFO_TYPE=>{
     {% else %}
-        load: (libs?: (MODINFO_BASETYPE|string)[], syms?:{[key:string]:NativePointer}):INFO_TYPE=>{
+        load: (libs?: (MODINFO_BASETYPE|string)[], syms?:{[key:string]:NativePointer}, init?:boolean):INFO_TYPE=>{
     {% endif %}
+
+            init  = init??true;
 
             base = Memory.alloc({{  info['load_size']  }});
             console.log('base', base);
@@ -170,7 +175,7 @@ export let mod  = {
             {% endfor %}
 
             ////////////////////////////////////////////////////////////////////////////////
-            mod_init(base);
+            if(init) mod_init(base);
         
     
     {% if 'name' in info and info['name'] | length >0 %}
@@ -195,6 +200,7 @@ export let mod  = {
         base = Process.getModuleByName(name).base;
 
 {% endif %}
+        
 
         const ___info:INFO_TYPE = {
 
@@ -305,6 +311,11 @@ export let mod  = {
 
             variables : {
             },
+
+            inits: init? undefined : [
+                {% for t in  info['inits'] %} ptr({{t}}),
+                {% endfor %}
+            ],
 
         };
         return ___info;

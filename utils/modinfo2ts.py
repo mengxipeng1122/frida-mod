@@ -335,8 +335,9 @@ def handleELF(info, binary, no_content=False):
         typ         = rel.type;
         address     = rel.address
         sym_name    = rel.symbol.name
-        if      typ == int(lief.ELF.RELOCATION_ARM.RELATIVE     )  \
-           or   typ == int(lief.ELF.RELOCATION_i386.RELATIVE    )  \
+        if      typ == int(lief.ELF.RELOCATION_ARM.RELATIVE     )  :
+            continue;
+        elif    typ == int(lief.ELF.RELOCATION_i386.RELATIVE    )  \
            or   typ == int(lief.ELF.RELOCATION_AARCH64.RELATIVE )  \
            or   typ == int(lief.ELF.RELOCATION_X86_64.R64       )  :
             code = f'base.add({hex(address)}).writePointer(base.add({hex(address)}).readPointer().add(base));'
@@ -372,9 +373,7 @@ def handleELF(info, binary, no_content=False):
     inits=[]
     # ctors
     for t, f in enumerate(binary.ctor_functions):
-        b = f.address
-        code = f"new NativeFunction(base.add({hex(b)}), 'void', [])();"
-        inits.append(code)
+        inits.append(hex(f.address))
     info['inits'] = inits
 
     # deinit codes

@@ -11,7 +11,7 @@ extern "C"  {
 
 #endif 
 
-void _frida_puts(const char*);
+void _frida_log(const char*);
 void _frida_err();
 
 #ifdef __cplusplus
