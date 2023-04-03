@@ -11,6 +11,7 @@ extern "C"  {
 
 #endif 
 
+void _frida_hexdump(void*, unsigned int n);
 void _frida_log(const char*);
 void _frida_err();
 
