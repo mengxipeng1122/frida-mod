@@ -85,9 +85,11 @@ export type INFO_TYPE  = {
 {% endif %}
 
     
-    name    : string,
+    name        : string,
 
-    base    : NativePointer,
+    base        : NativePointer,
+
+    load_size  ?: number;
 
 {% if 'cave_offset' in info %}
     cave    : NativePointer,
@@ -133,7 +135,10 @@ export type INFO_TYPE  = {
 
 const mod_init  = (base:NativePointer)=>{
     // initialize codes
-    {% for t in  info['inits'] %} new NativeFunction(base.add({{t}}), 'void', [])();
+    {% for t in  info['inits'] %} 
+    console.log('  + {{ t }} at {{ loop.index }} ')
+    new NativeFunction(base.add({{t}}), 'void', [])();
+    // console.log('  - {{ t }} at {{ loop.index }} ')
     {% endfor %}
 }
 
@@ -221,6 +226,9 @@ export let mod  = {
             name : name,
 
             base : base,
+{% if info['mode'] == 'load' %}
+            load_size : {{ info['load_size'] }},
+{% endif %}
 
         {% if 'cave_offset' in info %}
             cave : base.add({{info['cave_offset']}}),

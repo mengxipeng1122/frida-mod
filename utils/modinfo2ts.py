@@ -306,7 +306,7 @@ def handleELF(info, binary, no_content=False):
         info['loads'].append(l)
         sz = getAlignNum(virtual_address+virtual_size, alignment)
         load_size = max(sz, load_size)
-    info['load_size'] = load_size;            
+    info['load_size'] = hex(load_size);
     if(len(load_segments)>0):
         text_segment = load_segments[0]
         info['cave_offset'] = text_segment.virtual_address + text_segment.virtual_size
@@ -318,14 +318,14 @@ def handleELF(info, binary, no_content=False):
         #if not sym.exported:continue
         if sym.value==0: continue
         if sym.type==lief.ELF.SYMBOL_TYPES.NOTYPE: continue
-        info['symbols'][k] = {'offset':sym.value}
+        info['symbols'][k] = {'offset':hex(sym.value)}
     for k, v in info['variables'].items():
         if not binary.has_symbol(k):continue
         sym = binary.get_symbol(k)
         #if not sym.exported:continue
         if sym.type==lief.ELF.SYMBOL_TYPES.NOTYPE: continue
         if sym.value==0: continue
-        info['symbols'][k] = {'offset':sym.value}
+        info['symbols'][k] = {'offset':hex(sym.value)}
 
     ########################################
     # patches
@@ -335,9 +335,8 @@ def handleELF(info, binary, no_content=False):
         typ         = rel.type;
         address     = rel.address
         sym_name    = rel.symbol.name
-        if      typ == int(lief.ELF.RELOCATION_ARM.RELATIVE     )  :
-            continue;
-        elif    typ == int(lief.ELF.RELOCATION_i386.RELATIVE    )  \
+        if      typ == int(lief.ELF.RELOCATION_ARM.RELATIVE     )  \
+           or   typ == int(lief.ELF.RELOCATION_i386.RELATIVE    )  \
            or   typ == int(lief.ELF.RELOCATION_AARCH64.RELATIVE )  \
            or   typ == int(lief.ELF.RELOCATION_X86_64.R64       )  :
             code = f'base.add({hex(address)}).writePointer(base.add({hex(address)}).readPointer().add(base));'
@@ -358,7 +357,7 @@ def handleELF(info, binary, no_content=False):
                     sym = binary.get_symbol(sym_name)
                     if sym.type!=lief.ELF.SYMBOL_TYPES.NOTYPE \
                        and sym.value!=0:
-                       info['symbols'][sym_name] = {'offset':sym.value}
+                       info['symbols'][sym_name] = {'offset':hex(sym.value)}
                        foundSym = True;
             if foundSym: 
                 offset = info['symbols'][sym_name]['offset']
@@ -411,7 +410,7 @@ def handlePE(info, binary, no_content=False):
         if not no_content:
             l['content_ts']           = ','.join([hex(b) for b in content]);
         info['loads'].append(l)
-    info['load_size'] = load_size;            
+    info['load_size'] = hex(load_size);
     #TODO
     info['cave_offset'] = 0;
 
@@ -507,7 +506,7 @@ def main():
 
         'variables'     : {},
 
-        'load_size'     : 0,
+        'load_size'     : hex(0),
 
         'loads'         : [],
 
