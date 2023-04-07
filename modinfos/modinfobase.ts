@@ -119,6 +119,8 @@ export let resolveSymbol = (name:string, libs?:(MODINFO_BASETYPE|string)[], syms
                         if(e.name == name){ ret = e.address; }
                     })
                 if(ret!=null) return ret;
+                ret = Module.findExportByName(lib,name);
+                if(ret!=null) return ret;
             }
             else{
                 let e = Module.findExportByName(lib.name, name);

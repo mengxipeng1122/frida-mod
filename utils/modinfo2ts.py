@@ -184,10 +184,12 @@ def iterateTu(a,cb, level=0):
     for aa in a.get_children():
         iterateTu(aa, cb, level+1);
 
-def updateAllFunctions(tu, funcs={}):
+def updateAllFunctions(tu, src, funcs={}):
     def handleFunction(a):
+        if not a.location.file: return;
+        if a.location.file.name != src:return;
         if     a.kind == CursorKind.FUNCTION_DECL  \
-            or a.kind == a.kind == CursorKind.CXX_METHOD:
+            or a.kind == CursorKind.CXX_METHOD:
             res_type = a.result_type.get_canonical().spelling;
             symbolName = a.mangled_name
             funName = a.lexical_parent.spelling+'_'+a.spelling if a.kind == CursorKind.CXX_METHOD else a.spelling;
@@ -228,8 +230,10 @@ def updateAllFunctions(tu, funcs={}):
     iterateTu(tu.cursor, handleFunction);
     return(funcs)
 
-def updateAllStructs(tu, strs={}):
+def updateAllStructs(tu, src, strs={}):
     for a in tu.cursor.get_children():
+        if not a.location.file: continue;
+        if a.location.file.name != src: continue
         if a.kind == CursorKind.STRUCT_DECL:
             info = {
                 "fields": [ ],
@@ -251,8 +255,10 @@ def updateAllStructs(tu, strs={}):
             strs[a.spelling] = info
     return strs
 
-def updateAllVariables(tu, vs={}):
+def updateAllVariables(tu, src, vs={}):
     def handleVariable(a):
+        if not a.location.file: return
+        if a.location.file.name != src: return
         if a.kind == CursorKind.VAR_DECL:
             info = {
                 'type' : a.type.get_canonical().spelling,
@@ -312,20 +318,26 @@ def handleELF(info, binary, no_content=False):
         info['cave_offset'] = text_segment.virtual_address + text_segment.virtual_size
 
     # symbols
-    for k, v in info['functions'].items():
-        if not binary.has_symbol(k):continue
-        sym = binary.get_symbol(k)
-        #if not sym.exported:continue
+    for sym in binary.exported_symbols:
+        k = sym.name
         if sym.value==0: continue
         if sym.type==lief.ELF.SYMBOL_TYPES.NOTYPE: continue
+        #print(symbol.name)
         info['symbols'][k] = {'offset':hex(sym.value)}
-    for k, v in info['variables'].items():
-        if not binary.has_symbol(k):continue
-        sym = binary.get_symbol(k)
-        #if not sym.exported:continue
-        if sym.type==lief.ELF.SYMBOL_TYPES.NOTYPE: continue
-        if sym.value==0: continue
-        info['symbols'][k] = {'offset':hex(sym.value)}
+    # for k, v in info['functions'].items():
+    #     if not binary.has_symbol(k):continue
+    #     sym = binary.get_symbol(k)
+    #     #if not sym.exported:continue
+    #     if sym.value==0: continue
+    #     if sym.type==lief.ELF.SYMBOL_TYPES.NOTYPE: continue
+    #     info['symbols'][k] = {'offset':hex(sym.value)}
+    # for k, v in info['variables'].items():
+    #     if not binary.has_symbol(k):continue
+    #     sym = binary.get_symbol(k)
+    #     #if not sym.exported:continue
+    #     if sym.type==lief.ELF.SYMBOL_TYPES.NOTYPE: continue
+    #     if sym.value==0: continue
+    #     info['symbols'][k] = {'offset':hex(sym.value)}
 
     ########################################
     # patches
@@ -537,9 +549,9 @@ def main():
         print(f'parsing {src} ... ')
         tu = index.parse(src, parseArgs)
         if not tu: parser.error(f"unable to load input {args.source}")
-        updateAllFunctions(tu,  info['functions'])
-        updateAllStructs(tu,    info['structs'  ])
-        updateAllVariables(tu,  info['variables']);
+        updateAllFunctions(tu,  src, info['functions'])
+        updateAllStructs(tu,    src, info['structs'  ])
+        updateAllVariables(tu,  src, info['variables']);
 
     ##################################################
     # extract info from so file 

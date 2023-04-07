@@ -320,10 +320,12 @@ export let mod  = {
             variables : {
             },
 
+{% if info['mode'] == 'load' %}
             inits: init? undefined : [
                 {% for t in  info['inits'] %} ptr({{t}}),
                 {% endfor %}
             ],
+{% endif %}
 
         };
         return ___info;
