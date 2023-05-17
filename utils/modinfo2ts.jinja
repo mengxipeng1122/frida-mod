@@ -95,11 +95,7 @@ export type INFO_TYPE  = {
     cave    : NativePointer,
 {% endif %}
 
-    symbols     : {
-        {% for k, v in  info['symbols'].items() %}
-        {{k}}: NativePointer,
-        {% endfor %}
-    },
+    symbols     : {[key:string]:NativePointer},
 
     hookids : {
         {% for k, v in  info['functions'].items() if k in info['symbols'] %}

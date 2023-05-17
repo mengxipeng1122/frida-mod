@@ -5,6 +5,7 @@
 # only support 32bit, ARM/thumb so far
 
 import os
+import inspect
 import lief
 import json
 import argparse
@@ -313,6 +314,7 @@ def handleELF(info, binary, no_content=False):
         sz = getAlignNum(virtual_address+virtual_size, alignment)
         load_size = max(sz, load_size)
     info['load_size'] = hex(load_size);
+
     if(len(load_segments)>0):
         text_segment = load_segments[0]
         info['cave_offset'] = text_segment.virtual_address + text_segment.virtual_size
@@ -583,9 +585,7 @@ def main():
                 info['functions'][symbolName]['funName']=f'{k}_{t}'
      
     # write output file
-    #for k, v in info['functions'].items():
-    #    if k.find('CheckInput')>=0: print(k,v)
-    #json.dump(info, open('/tmp/info.json','w'))
+    # filename = os.path.basename(__file__);lineno = str(inspect.currentframe().f_lineno);print(f'{filename}:{lineno}');
     module_path = os.path.dirname(os.path.abspath(__file__))
     templateFn = os.path.join(module_path, 'modinfo2ts.jinja')
     t = Template(open(templateFn).read())
