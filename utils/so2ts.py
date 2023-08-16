@@ -374,7 +374,8 @@ def handleELF(info, binary, no_content=False):
                        foundSym = True;
             if foundSym: 
                 offset = info['symbols'][sym_name]['offset']
-                code = f'base.add({hex(address)}).writePointer(base.add({hex(offset)}));'
+                address = address if isinstance(address, str) else hex(address)
+                code = f'base.add({address}).writePointer(base.add({offset}));'
             else:
                 code = f"base.add({hex(address)}).writePointer(resolveSymbol('{sym_name}', libs, syms));"
         else:
