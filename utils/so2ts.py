@@ -2,295 +2,23 @@
 # -*- coding: utf-8 -*-
 
 # this python script try to convert a object file to a module for frida
-# only support 32bit, ARM/thumb so far
 
 import os
-import inspect
 import lief
-import json
 import argparse
 from jinja2 import Template
 from utils import *
 
-
-MAX_VARS=10
-
-def fixFunctionName(n):
-    n = n.replace(' ','_')
-    n = n.replace('!','_')
-    n = n.replace('~','_')
-    n = n.replace('=','_')
-    n = n.replace(':','_')
-    n = n.replace('[]','')
-    return n;
-
-def fixArugmentName(n):
-    n = n.replace(':','_')
-    return n;
-
-def preprocessType(t):
-    t=t.replace('const','')
-    t=t.strip();
-    return t;
-
-def type2Frida(t):
-    t = preprocessType(t)
-    if t =='int'            : return "int";
-    if t =='bool'           : return "int";
-    if t =='unsigned long'  : return "uint";
-    if t =='void'           : return "void";
-    if t =='unsigned int'   : return "uint";
-    if t =='long'           : return "int";
-    if t =='long long'      : return "int";
-    if t =='double'         : return "pointer";
-    if t.find('*')>=0       : return 'pointer';
-    #print(f'unhandled type {t}')
-    return 'pointer'
-
-def type2TypeScriptForCall(t):
-    t = type2Frida(t)
-    if t =="int"           : return 'number';
-    if t =="uint"          : return 'number';
-    if t =="void"          : return 'void';  
-    if t =="pointer"       : return 'NativePointer';
-    raise Exception(f'unhandled type {t}')
-
-
-def args2GetFun(t):
-    t = preprocessType(t)
-    if t == 'char *'        : return 'getString';
-    if t == 'unsigned char' : return 'p2U32';
-    if t == 'unsigned short': return 'p2U32';
-    if t == 'unsigned int'  : return 'p2U32';
-    if t == 'char'          : return 'p2S32';
-    if t == 'short'         : return 'p2S32';
-    if t == 'int'           : return 'p2S32';
-    return None;
-
-def type2GetFunForCall(t):
-    t = preprocessType(t)
-    if t == 'char *'        : return 'getStringWithPointer';
-    if t == 'unsigned char' : return 'getU8';
-    if t == 'unsigned short': return 'getU16';
-    if t == 'unsigned int'  : return 'getU32';
-    if t == 'char'          : return 'getS8';
-    if t == 'short'         : return 'getS16';
-    if t == 'int'           : return 'getS32';
-    return 'getPointer';
-
-
-def type2TypeScript(t):
-    t = preprocessType(t)
-    if t =="int"           : return 'number';
-    if t =="uint"          : return 'number';
-    if t =="void"          : return 'void';  
-    if t =="pointer"       : return 'NativePointer';
-    if t =='char *'        : return 'string';
-    if t =='unsigned char' : return 'number';
-    if t =='unsigned short': return 'number';
-    if t =='unsigned int'  : return 'number';
-    if t =='char'          : return 'number';
-    if t =='short'         : return 'number';
-    if t =='int'           : return 'number';
-    #print(f'unhandled type {t}')
-    return 'NativePointer'
-
-def getFunSaveArgsCode  (info):
-    ret = []
-    for t, arg in enumerate(info['arguments']):
-        if arg['name']!='':
-            ret.append(f'this.{arg["name"]} = args[{t}];')
-        else:
-            ret.append(f'this.args{t} = args[{t}];')
-    if info["is_variadic"]: 
-        for t in range(MAX_VARS):
-            ret.append(f'this.targs{t} = args[{t+len(info["arguments"])}];')
-    return ret;
-
-def getFunShowArgsCode  (info):
-    ret = []
-    for t, arg in enumerate(info['arguments']):
-        name = arg['name']
-        getFun = args2GetFun(arg['type'])
-        getValCode = ""
-        if name!='':
-            c = f'"{name} =","[", this.{name},"]"'
-            if getFun!=None: c+=f',{getFun}(this.{name})'
-        else:
-            c = f'"args{t} =","[", this.args{t},"]"'
-            if getFun!=None: c+=f',{getFun}(this.args{t})'
-        ret.append(c);
-    if info["is_variadic"]: 
-        for t in range(MAX_VARS):
-            ret.append(f'"targs[t] =", this.targs{t}');
-    return ret;
-
-def getFunThisNames     (info):
-    ret = []
-    for t, arg in enumerate(info['arguments']):
-        name = arg['name']
-        if name!='':
-            ret.append(f'this.{name}')
-        else:
-            ret.append(f'this.args{t}')
-    if info["is_variadic"]: 
-        for t in range(MAX_VARS):
-            ret.append(f'this.targs{t}');
-    return ret;
-
-def getFridaArgumentList(info):
-    ret = [ f'{type2Frida(arg["type"])}' for arg in info['arguments']]
-    if info["is_variadic"]: 
-        for t in range(MAX_VARS):
-            ret.append("'pointer'")
-    return ret;
-
-def getFunTSArgs        (info):
-    ret = []
-    for t, arg in enumerate(info['arguments']):
-        if arg['name'] != '':
-            ret.append(f' {arg["name"]}:{type2TypeScriptForCall(arg["type"])}')
-        else:
-            ret.append(f' arg{t}:{type2TypeScriptForCall(arg["type"])}')
-    if info["is_variadic"]: ret.append('...args:NativePointer[]')
-    return ret;
-
-def getFunCArgs         (info):
-    ret = [ f'{arg["type"]} {arg["name"]}' for arg in info['arguments']]
-    if info["is_variadic"]: ret.append('...')
-    return ret;
-
-def getFunFridaNames    (info):
-    ret = []
-    for t, arg in enumerate(info['arguments']):
-        if arg['name'] != '':
-            ret.append(f' {arg["name"]}')
-        else:
-            ret.append(f' arg{t}')
-    if info["is_variadic"]: 
-        for t in range(MAX_VARS):
-            ret.append(f'targs[{t}]')
-    return ret;
-
-def getFunFridaArgs     (info):
-    ret = [ f"'{type2Frida(arg['type'])}'" for arg in info['arguments']]
-    if info["is_variadic"]: 
-        for t in range(MAX_VARS):
-            ret.append(f"'pointer'");
-    return ret;
-
-def iterateTu(a,cb, level=0):
-    cb(a) 
-    for aa in a.get_children():
-        iterateTu(aa, cb, level+1);
-
-def updateAllFunctions(tu, src, funcs={}):
-    def handleFunction(a):
-        if not a.location.file: return;
-        if a.location.file.name != src:return;
-        if     a.kind == CursorKind.FUNCTION_DECL  \
-            or a.kind == CursorKind.CXX_METHOD:
-            res_type = a.result_type.get_canonical().spelling;
-            symbolName = a.mangled_name
-            funName = a.lexical_parent.spelling+'_'+a.spelling if a.kind == CursorKind.CXX_METHOD else a.spelling;
-            info = {
-                "is_variadic"   : a.type.is_function_variadic() if a.type.kind == TypeKind.FUNCTIONPROTO else False,
-                "arguments"     : [],
-                "funName"       : fixFunctionName(funName),
-            }
-            info['return'] = {
-                'type': res_type,
-                'langs': {
-                    'ts'    : type2TypeScriptForCall(res_type),
-                    'frida' : type2Frida(res_type),
-                 }
-            }
-            info['is_void'         ] = res_type == 'void';
-            args  = [('void *', 'pthis')] if a.kind == CursorKind.CXX_METHOD and not a.is_static_method() else []
-            #if symbolName .find('CheckInput')>=0: print(args, a.kind == CursorKind)
-            for aa in a.get_arguments():
-                args.append( ( aa.type.get_canonical().spelling, aa.spelling) )
-            for typ, name in args:
-                info['arguments'].append({
-                    'name' : fixArugmentName(name), 
-                    'type' : typ,
-                    'langs': {
-                        'ts'    : type2TypeScript(typ),
-                        'frida' : type2Frida(typ),
-                     }
-                 })
-            info['ts_args'         ] = getFunTSArgs        (info)
-            info['frida_names'     ] = getFunFridaNames    (info)
-            info['c_args'          ] = getFunCArgs         (info)
-            info['frida_args'      ] = getFunFridaArgs     (info)
-            info['save_args_code'  ] = getFunSaveArgsCode  (info)
-            info['show_args_code'  ] = getFunShowArgsCode  (info)
-            info['this_names'      ] = getFunThisNames     (info)
-            funcs[symbolName]= info
-    iterateTu(tu.cursor, handleFunction);
-    return(funcs)
-
-def updateAllStructs(tu, src, strs={}):
-    for a in tu.cursor.get_children():
-        if not a.location.file: continue;
-        if a.location.file.name != src: continue
-        if a.kind == CursorKind.STRUCT_DECL:
-            info = {
-                "fields": [ ],
-            }
-            for  aa in a.get_children():
-                if aa.kind ==  CursorKind.DESTRUCTOR: continue
-                if aa.kind ==  CursorKind.CONSTRUCTOR: continue
-                typ = aa.type.get_canonical().spelling;
-                info['fields'].append({
-                    'type' : typ,
-                    'name' : fixArugmentName( aa.spelling ),
-                    'langs': {
-                        'ts'    : type2TypeScript(typ),
-                        'frida' : type2Frida(typ),
-                     },
-                     'offset': aa.get_field_offsetof()//8,
-                     'getFun': type2GetFunForCall(typ),
-                })
-            strs[a.spelling] = info
-    return strs
-
-def updateAllVariables(tu, src, vs={}):
-    def handleVariable(a):
-        if not a.location.file: return
-        if a.location.file.name != src: return
-        if a.kind == CursorKind.VAR_DECL:
-            info = {
-                'type' : a.type.get_canonical().spelling,
-            }
-            vs[a.spelling] = info
-    iterateTu(tu.cursor, handleVariable);
-    return vs
-
-def getFunctionPrototype(k,v):
-    args = ','.join([f' {t["type"]} {t["name"]}' for t in v['argument']])
-    if v['is_variadic']:
-        args+= ', ...'
-    code = f'{v["return_type"]} {k}({args});'
-    return code;
-
-def getReloctionTypeName(t):
-    if t==2    : return 'R_ARM_ABS32'
-    if t==3    : return 'R_ARM_REL32'
-    if t==6    : return 'R_386_GLOB_DAT'
-    if t==7    : return 'R_386_JUMP_SLOT'
-    if t==8    : return 'R_386_RELATIVE'
-    if t==21   : return 'R_ARM_GLOB_DAT'
-    if t==22   : return 'R_ARM_JUMP_SLOT'
-    if t==23   : return 'R_ARM_RELATIVE'
-    if t==257  : return 'R_AARCH64_ABS64'
-    if t==1025 : return 'R_AARCH64_GLOB_DA'
-    if t==1026 : return 'R_AARCH64_JUMP_SL'
-    if t==1027 : return 'R_AARCH64_RELATIVE'
-    raise Exception(f'unhandled reclocation type {t}')
-    
-def handleELF(info, binary, no_content=False):
-    #  loads
+def handle_ELF(info, binary, no_content=False):
+    """
+    Handles ELF information and returns the updated 'info' dictionary.
+    Args:
+        info (dict): Dictionary containing ELF information.
+        binary: The ELF binary object.
+        no_content (bool, optional): Flag to indicate whether to include content in the 'info' dictionary. Defaults to False.
+    Returns:
+        dict: Updated 'info' dictionary.
+    """
     load_size = 0;
     load_segments = [seg for seg in binary.segments if seg.type == lief.ELF.SEGMENT_TYPES.LOAD ]
     for seg in load_segments:
@@ -308,7 +36,7 @@ def handleELF(info, binary, no_content=False):
             'size'              : size            ,
             }
         if not no_content:
-            l['content_ts']           = ','.join([hex(b) for b in content]);
+            l['content_ts']   = ','.join([hex(b) for b in content]);
         info['loads'].append(l)
         sz = getAlignNum(virtual_address+virtual_size, alignment)
         load_size = max(sz, load_size)
@@ -323,94 +51,77 @@ def handleELF(info, binary, no_content=False):
         k = sym.name
         if sym.value==0: continue
         if sym.type==lief.ELF.SYMBOL_TYPES.NOTYPE: continue
-        #print(symbol.name)
         info['symbols'][k] = {'offset':hex(sym.value)}
-    # for k, v in info['functions'].items():
-    #     if not binary.has_symbol(k):continue
-    #     sym = binary.get_symbol(k)
-    #     #if not sym.exported:continue
-    #     if sym.value==0: continue
-    #     if sym.type==lief.ELF.SYMBOL_TYPES.NOTYPE: continue
-    #     info['symbols'][k] = {'offset':hex(sym.value)}
-    # for k, v in info['variables'].items():
-    #     if not binary.has_symbol(k):continue
-    #     sym = binary.get_symbol(k)
-    #     #if not sym.exported:continue
-    #     if sym.type==lief.ELF.SYMBOL_TYPES.NOTYPE: continue
-    #     if sym.value==0: continue
-    #     info['symbols'][k] = {'offset':hex(sym.value)}
-
-    ########################################
-    # patches
     # relocations
     info['patches'] = []
     for k, rel in enumerate(binary.relocations):
         typ         = rel.type;
         address     = rel.address
         sym_name    = rel.symbol.name
-        if      typ == int(lief.ELF.RELOCATION_ARM.RELATIVE     )  \
-           or   typ == int(lief.ELF.RELOCATION_i386.RELATIVE    )  \
-           or   typ == int(lief.ELF.RELOCATION_AARCH64.RELATIVE )  \
-           or   typ == int(lief.ELF.RELOCATION_X86_64.R64       )  :
+        if typ in [
+            int(lief.ELF.RELOCATION_ARM.RELATIVE     ) ,
+            int(lief.ELF.RELOCATION_i386.RELATIVE    ) ,
+            int(lief.ELF.RELOCATION_AARCH64.RELATIVE ) ,
+            int(lief.ELF.RELOCATION_X86_64.R64       ) ,
+        ]:
             code = f'base.add({hex(address)}).writePointer(base.add({hex(address)}).readPointer().add(base));'
 
-        elif typ == int(lief.ELF.RELOCATION_ARM.GLOB_DAT        ) \
-          or typ == int(lief.ELF.RELOCATION_AARCH64.JUMP_SLOT   ) \
-          or typ == int(lief.ELF.RELOCATION_AARCH64.ABS64       ) \
-          or typ == int(lief.ELF.RELOCATION_AARCH64.GLOB_DAT    ) \
-          or typ == int(lief.ELF.RELOCATION_ARM.JUMP_SLOT       ) \
-          or typ == int(lief.ELF.RELOCATION_ARM.ABS32           ) \
-          or typ == int(lief.ELF.RELOCATION_ARM.REL32           ) \
-          or typ == int(lief.ELF.RELOCATION_i386.JUMP_SLOT      ) \
-          or typ == int(lief.ELF.RELOCATION_i386.GLOB_DAT       ) :
+        elif typ in [
+            int(lief.ELF.RELOCATION_ARM.GLOB_DAT        ) ,
+            int(lief.ELF.RELOCATION_AARCH64.JUMP_SLOT   ) ,
+            int(lief.ELF.RELOCATION_AARCH64.ABS64       ) ,
+            int(lief.ELF.RELOCATION_AARCH64.GLOB_DAT    ) ,
+            int(lief.ELF.RELOCATION_ARM.JUMP_SLOT       ) ,
+            int(lief.ELF.RELOCATION_ARM.ABS32           ) ,
+            int(lief.ELF.RELOCATION_ARM.REL32           ) ,
+            int(lief.ELF.RELOCATION_i386.JUMP_SLOT      ) ,
+            int(lief.ELF.RELOCATION_i386.GLOB_DAT       ) ,
+        ]:
             # try to found symbol
-            foundSym = sym_name in info['symbols'];
-            if not foundSym:
+            found_sym = sym_name in info['symbols'];
+            if not found_sym:
                 if binary.has_symbol(sym_name):
                     sym = binary.get_symbol(sym_name)
                     if sym.type!=lief.ELF.SYMBOL_TYPES.NOTYPE \
                        and sym.value!=0:
                        info['symbols'][sym_name] = {'offset':hex(sym.value)}
-                       foundSym = True;
-            if foundSym: 
-                offset = info['symbols'][sym_name]['offset']
+                       found_sym = True;
+            if found_sym: 
+                offset  = info['symbols'][sym_name]['offset']
                 address = address if isinstance(address, str) else hex(address)
-                code = f'base.add({address}).writePointer(base.add({offset}));'
+                code    = f'base.add({address}).writePointer(base.add({offset}));'
             else:
-                code = f"base.add({hex(address)}).writePointer(resolveSymbol('{sym_name}', libs, syms));"
+                code    = f"base.add({hex(address)}).writePointer(resolveSymbol('{sym_name}', libs, syms));"
         else:
             raise Exception(f'unhandled relocation type {typ}')
         info['patches'].append(code)
 
     # init codes
-    inits=[]
-    # ctors
-    for t, f in enumerate(binary.ctor_functions):
-        inits.append(hex(f.address))
-    info['inits'] = inits
+    info['inits'] = [hex(f.address) for f in binary.ctor_functions]
 
     # deinit codes
-    deinits=[]
-    # ctors
-    for t, f in enumerate(binary.dtor_functions):
-        b = f.address
-        code = f"new NativeFunction(base.add({hex(b)}), 'void', [])();"
-        deinits.append(code)
-    info['deinits'] = deinits
-
+    info['deinits'] = [hex(f.address) for f in binary.dtor_functions]
 
     return info;
 
-def handlePE(info, binary, no_content=False):
+def handle_PE(info, binary, no_content=False):
+    """
+    Handles PE file format.
+    Args:
+        info (dict): Dictionary to store information about the PE file.
+        binary (lief.PE.Binary): PE binary object.
+        no_content (bool, optional): Flag to indicate whether to include the content of each section. Defaults to False.
+    Returns:
+        dict: Updated info dictionary.
+    """
     #  loads
-    imagebase = binary.optional_header.imagebase;
-    sizeof_image = binary.optional_header.sizeof_image;
-    load_size = sizeof_image
+    image_base      = binary.optional_header.imagebase;
+    sizeof_image    = binary.optional_header.sizeof_image;
+    load_size       = sizeof_image
     for section in binary.sections:
-        #print(section.name, section.virtual_address, section.virtual_size)
         virtual_address = section.virtual_address;
         virtual_size    = section.virtual_size;
-        alignment       = 0x100; #TODO
+        alignment       = 0x100; 
         file_offset     = section.offset;
         size            = len (section.content);
         content         = list(section.content);
@@ -435,130 +146,77 @@ def handlePE(info, binary, no_content=False):
     for t, reloc in enumerate(binary.relocations):
         virtual_address = reloc.virtual_address;
         for tt, entry in enumerate(reloc.entries):
-            typ = entry.type
+            typ     = entry.type
             address = entry.address;
-            #print(t, tt, typ)
             if typ == lief.PE.RELOCATIONS_BASE_TYPES.ABSOLUTE: pass
             elif typ == lief.PE.RELOCATIONS_BASE_TYPES.DIR64: pass
             elif typ == lief.PE.RELOCATIONS_BASE_TYPES.HIGHLOW:
-                code = f'base.add({hex(address)}).writePointer(base.add({hex(address)}).readPointer().add(base.sub({hex(imagebase)})));'
+                code = f'base.add({hex(address)}).writePointer(base.add({hex(address)}).readPointer().add(base.sub({hex(image_base)})));'
                 patches.append(code)
             else:
-                #print(t,tt, entry, int(lief.PE.RELOCATIONS_BASE_TYPES.HIGHLOW), typ)
                 raise Exception(f'unhandled PE relocation type {typ}' )
 
     # imports
     for t, imp in enumerate(binary.imports):
         for tt,  entry in enumerate(imp.entries):
-            #print(dir(entry))
-            #print(t, tt, entry, entry.name, entry.value, entry.iat_address, entry.iat_value, entry.ordinal if entry.is_ordinal else "erro")
-            address = entry.iat_address;
-            sym_name = entry.name;
-            code = f"base.add({hex(address)}).writePointer(resolveSymbol('{sym_name}', libs, syms));"
+            address     = entry.iat_address;
+            sym_name    = entry.name;
+            code        = f"base.add({hex(address)}).writePointer(resolveSymbol('{sym_name}', libs, syms));"
             patches.append(code)
-
     info['patches'] = patches
 
-    ########################################
-    #  init code 
-    # ctors
-    #for entry in binary.dynamic_entries:
-    #    if(entry.tag == lief.ELF.DYNAMIC_TAGS.INIT_ARRAY): 
-    #        ctors_offset=entry.value
-    #        info['ctors'] = [b for b in entry.array if b!=0]
-
-    # symbols
-    for k, v in info['functions'].items():
-        if not binary.has_symbol(k):continue
-        sym = binary.get_symbol(k)
-        #if not sym.exported:continue
-        if sym.value==0: continue
-        info['symbols'][k] = {'offset':sym.value}
-    for k, v in info['variables'].items():
-        if not binary.has_symbol(k):continue
-        sym = binary.get_symbol(k)
-        #if not sym.exported:continue
-        if sym.type==lief.ELF.SYMBOL_TYPES.NOTYPE: continue
-        if sym.value==0: continue
-        info['symbols'][k] = {'offset':sym.value}
     return info;
 
 def main():
-    parser = argparse.ArgumentParser(description="A utility for convert a module to a typescript module ")
-    parser.add_argument('-b', "--binary", type=str, required=True)
-    parser.add_argument('-o', '--output', default='/tmp/tt.ts')
-    parser.add_argument('-n', '--name',type=str, help='set module name' )
-    parser.add_argument('--no-content', action='store_true', default=False)
+    """
+    A utility for converting a module to a TypeScript module
+    """
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="A utility for converting a module to a TypeScript module")
+    parser.add_argument('-b', "--binary", type=str, required=True, help='path to the binary file')
+    parser.add_argument('-o', '--output', default='/tmp/tt.ts', help='path to the output file')
+    parser.add_argument('-n', '--name', type=str, help='set module name')
+    parser.add_argument('--no-content', action='store_true', default=False, help='flag to exclude content')
 
     args = parser.parse_args()
+
+    # Print command line arguments
     print(args)
 
+    # Initialize info dictionary
     info = {
-
-        'MAX_VARS'      : MAX_VARS,
-
         'no_content'    : args.no_content,
-
-        'mode'          : 'load', 
-
-        'name'          : "",
-
-        'symbols'       : {
-            #  '<name>' : {'offset': <offset>,  },
-         },
-
+        'mode'          : 'load',
+        'name'          : args.name or os.path.basename(args.binary),
+        'symbols'       : {},
         'binary'        : None,
-
-        'functions'     : {},
-        
-        'structs'       : {},
-
-        'variables'     : {},
-
         'load_size'     : hex(0),
-
         'loads'         : [],
-
         'relocations'   : [],
-
-        'ctors'         : [],
-
     }
 
-    if args.binary!=None: info['name'] = os.path.basename(args.binary);
-    if args.name!=None  : info['name'] = args.name
-
-
-    ##################################################
-    # extract info from so file 
-    #binary =  lief.parse(open(args.binary,'rb'))
-    binary =  lief.parse(args.binary)
+    # Parse the binary file
+    binary = lief.parse(args.binary)
     info['binary'] = binary
-    if binary.format == lief.EXE_FORMATS.PE:
-        info = handlePE(info, binary, args.no_content);
-    elif binary.format == lief.EXE_FORMATS.ELF:
-        info = handleELF(info, binary, args.no_content);
 
-    # handle same function game
-    funMap = {} # key == function name, value == list of symbol names
-    for k,v in info['functions'].items():
-        funName = v['funName']
-        if funName not in funMap:
-            funMap[funName] = [k]
-        else:
-            funMap[funName].append(k)
-    for k,v in funMap.items():
-        if len(v)>1:
-            for t,symbolName in enumerate(v):
-                info['functions'][symbolName]['funName']=f'{k}_{t}'
-     
-    # write output file
-    # filename = os.path.basename(__file__);lineno = str(inspect.currentframe().f_lineno);print(f'{filename}:{lineno}');
+    # Handle different binary formats
+    if binary.format == lief.EXE_FORMATS.PE:
+        info = handle_PE(info, binary, args.no_content)
+    elif binary.format == lief.EXE_FORMATS.ELF:
+        info = handle_ELF(info, binary, args.no_content)
+
+    # Get the path of the current module
     module_path = os.path.dirname(os.path.abspath(__file__))
+
+    # Read the template file
     templateFn = os.path.join(module_path, 'so2ts.jinja')
     t = Template(open(templateFn).read())
-    s = t.render( info = info);
-    open(args.output,'w').write(s)
+
+    # Render the template with the info dictionary
+    s = t.render(info=info)
+
+    # Write the rendered template to the output file
+    open(args.output, 'w').write(s)
 
 if __name__ == '__main__':
     main()

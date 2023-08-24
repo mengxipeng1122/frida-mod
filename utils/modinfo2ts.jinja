@@ -132,7 +132,7 @@ export type INFO_TYPE  = {
 const mod_init  = (base:NativePointer)=>{
     // initialize codes
     {% for t in  info['inits'] %} 
-    console.log('  + {{ t }} at {{ loop.index }} ')
+    // console.log('  + {{ t }} at {{ loop.index }} ')
     new NativeFunction(base.add({{t}}), 'void', [])();
     // console.log('  - {{ t }} at {{ loop.index }} ')
     {% endfor %}
