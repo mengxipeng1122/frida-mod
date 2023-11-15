@@ -139,6 +139,14 @@ def handle_PE(info, binary, no_content=False):
     #TODO
     info['cave_offset'] = 0;
 
+    # symbols
+    # Check if it has an export table
+    if binary.has_exports:
+        # Loop over the exported symbols
+        for export in binary.get_export().entries:
+            # Print export name and address
+            info['symbols'][export.name] = {'offset':hex(export.address)}
+
     ########################################
     #patches
     patches=[]
