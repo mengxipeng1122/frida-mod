@@ -95,8 +95,7 @@ def handle_relocation(uc, info, binary):
             int(lief.ELF.RELOCATION_i386.GOTPC),
         ]:
             if relocation.symbol.name == '_GLOBAL_OFFSET_TABLE_':
-                reloc_section_address = info['sections']['.rodata']['address']
-                uc.mem_write(reloc_addr,struct.pack('i',reloc_section_address+c-reloc_addr))
+                uc.mem_write(reloc_addr,struct.pack('i',c-reloc_addr))
                 pass
         elif relocation.type in [
             int(lief.ELF.RELOCATION_i386.GOTOFF),
@@ -105,7 +104,7 @@ def handle_relocation(uc, info, binary):
             sym_section_addr = info['sections'][relocation.symbol.section.name]['address']
             reloc_section_addr = info['sections'][relocation.section.name]['address']
             print('relocaltion.section.address', hex(sym_section_addr))
-            #uc.mem_write(reloc_addr,struct.pack('i', sym_addr-reloc_addr+c))
+            uc.mem_write(reloc_addr,struct.pack('i', sym_section_addr+c))
         else:
             raise ValueError(f"Unsupported relocation type {relocation.type}")
     return uc
@@ -168,7 +167,7 @@ def enumerate_obj_file(input_file):
     print(info)
     # emulate code in infinite time & unlimited instructions
     ADDRESS=info['symbols']['test0']
-    mu.emu_start(ADDRESS, -1, count=33);
+    mu.emu_start(ADDRESS, -1, count=30);
 
 
 
