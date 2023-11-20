@@ -29,13 +29,13 @@ def init_uc_by_binary(binary, base=0x10000000):
         raise ValueError("Not an ELF binary")
 
     assert isinstance(binary, lief.ELF.Binary), 'Not an ELF binary'
-    assert binary.header.machine_type == lief.ELF.ARCH.i386, 'Not an i386 binary'
+    assert binary.header.machine_type == lief.ELF.ARCH.x86_64, 'Not an x64 binary'
 
-    print('i386')
+    print('x86_64')
     architecture = UC_ARCH_X86
-    mode = UC_MODE_32
-    md = Cs(CS_ARCH_X86, CS_MODE_32) 
-    ks = Ks(KS_ARCH_X86, KS_MODE_32)
+    mode = UC_MODE_64
+    md = Cs(CS_ARCH_X86, CS_MODE_64)
+    ks = Ks(KS_ARCH_X86, KS_MODE_64)
 
     uc = unicorn.Uc(architecture, mode)
     # calculate the total load size
@@ -86,28 +86,26 @@ def handle_relocation(uc, info, binary):
         c = struct.unpack('i',uc.mem_read(reloc_addr,4))[0]
         print('relocatino address', hex(reloc_addr))
         if relocation.type in [
-            int(lief.ELF.RELOCATION_i386.PC32),
-            int(lief.ELF.RELOCATION_i386.PLT32),
+            int(lief.ELF.RELOCATION_X86_64.PC32),
         ]:
-            sym_section_addr = info['symbols'][relocation.symbol.name]['address']
-            uc.mem_write(reloc_addr, struct.pack('i', sym_section_addr-reloc_addr+c))
-        elif relocation.type in [
-            int(lief.ELF.RELOCATION_i386.GOTPC),
-        ]:
-            if relocation.symbol.name == '_GLOBAL_OFFSET_TABLE_':
-                uc.mem_write(reloc_addr,struct.pack('i',c-reloc_addr))
-                pass
-        elif relocation.type in [
-            int(lief.ELF.RELOCATION_i386.GOTOFF),
-        ]:
-            sym_addr = info['symbols'][relocation.symbol.name]
+            sym_addr=info['symbols'][relocation.symbol.name]['address']
+            sym_addr+=relocation.addend
             sym_section_addr = info['sections'][relocation.symbol.section.name]['address']
-            reloc_section_addr = info['sections'][relocation.section.name]['address']
-            print('relocaltion.section.address', hex(sym_section_addr))
-            uc.mem_write(reloc_addr,struct.pack('i', sym_section_addr+c))
+            uc.mem_write(reloc_addr,struct.pack('i', sym_addr-reloc_addr))
+
+        elif relocation.type in [
+            int(lief.ELF.RELOCATION_X86_64.PLT32),
+        ]:
+            sym_addr = info['symbols'][relocation.symbol.name]['address']
+            sym_addr += relocation.addend
+            uc.mem_write(reloc_addr,struct.pack('i', sym_addr-reloc_addr))
+
+
         else:
             raise ValueError(f"Unsupported relocation type {relocation.type}")
     return uc
+
+
 
 
 def enumerate_obj_file(input_file):
@@ -146,8 +144,8 @@ def enumerate_obj_file(input_file):
         disembly_instructions(uc, md, address, size)
         for k , v in dummy_symbols.items():
             if address == v:
-                print('i386')
-                p = uc.reg_read(UC_X86_REG_EAX)
+                print('x64')
+                p = uc.reg_read(UC_X86_REG_RDI)
                 print('call ', k, hex(p),)
                 print( '         =>', get_uc_string(uc,p))
 
