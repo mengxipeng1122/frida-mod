@@ -136,10 +136,31 @@ export let resolveSymbol = (name:string, libs?:(MODINFO_BASETYPE|string)[], syms
     throw Error(`can not resolve symbol ${name}`);
 }
 
-export let readFileData = (fpath:string, sz:number, offset?:number):ArrayBuffer =>{
+export let readFileData = (fpath:string, sz:number, offset?:number):ArrayBuffer  =>{
+    if(sz<=0) return new ArrayBuffer(0);
     offset = offset ?? 0;
     let platform = Process.platform;
     if (platform=='linux'){
+        let fopen = new NativeFunction(Module.getExportByName(null,'fopen' ),'pointer', ['pointer','pointer']);
+        let fseek = new NativeFunction(Module.getExportByName(null,'fseek' ),'int'    , ['pointer','long','int']);
+        let fclose= new NativeFunction(Module.getExportByName(null,'fclose'),'int',     ['pointer',]);
+        let fread = new NativeFunction(Module.getExportByName(null,'fread' ),'size_t',  ['pointer','size_t','size_t','pointer']);
+        let buf = Memory.alloc(sz);
+        let SEEK_SET = 0;
+        let SEEK_CUR = 1;
+        let SEEK_END = 2;
+
+        let fp = fopen(Memory.allocUtf8String(fpath), Memory.allocUtf8String('rb'));
+        if(fp.isNull()){ throw new Error(`open ${fpath} failed`); }
+        fseek(fp, offset, SEEK_SET);
+        let read = fread(buf, 1, sz, fp);
+        if(read.toNumber()!=sz){ console.log(`error at read file ${fpath}, ${read}/${sz}`); }
+        let ab = buf.readByteArray(sz);
+        if(ab==null){throw new Error(`read byte array failed when read file ${fpath}`);}
+        fclose(fp);
+        return ab;
+    }
+    else if (platform=='windows'){
         let fopen = new NativeFunction(Module.getExportByName(null,'fopen' ),'pointer', ['pointer','pointer']);
         let fseek = new NativeFunction(Module.getExportByName(null,'fseek' ),'int'    , ['pointer','long','int']);
         let fclose= new NativeFunction(Module.getExportByName(null,'fclose'),'int',     ['pointer',]);

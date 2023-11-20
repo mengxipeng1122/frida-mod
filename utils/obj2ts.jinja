@@ -1,0 +1,116 @@
+
+import { 
+    MODINFO_BASETYPE, 
+    hookShowIndentStr, 
+    getHookLevelIndentStr, 
+    increaseHookLevel, 
+    decreaseHookLevel, 
+    p2Pointer, 
+    p2U32, 
+    p2S32, 
+    getU8, 
+    getU16, 
+    getU32, 
+    getS8, 
+    getS16, 
+    getS32, 
+    getPointer, 
+    getString, 
+    getStringWithPointer, 
+    resolveSymbol,
+    readFileData,
+} from './modinfobase'
+
+let base = ptr(0); // avoid frida free allocated buffer 
+
+export type INFO_TYPE  = {
+
+    name        : string,
+
+    base        : NativePointer,
+
+    load_size  ?: number;
+
+    symbols     : {[key:string]:NativePointer},
+
+
+};
+
+export let mod  = {
+
+{% if info['mode'] == 'load' %}
+    {% if info['no_content'] %}
+        load: (sopath:string, libs?: (MODINFO_BASETYPE|string)[], syms?:{[key:string]:NativePointer}):INFO_TYPE=>{
+    {% else %}
+        load: (libs?: (MODINFO_BASETYPE|string)[], syms?:{[key:string]:NativePointer}):INFO_TYPE=>{
+    {% endif %}
+
+            base = Memory.alloc({{  info['load_size']  }});
+            console.log('base', base);
+            Memory.protect(base, {{info['load_size']}}, 'rwx');
+
+            ////////////////////////////////////////////////////////////////////////////////
+            // load content
+        {% if info['no_content'] %}
+            {% for t in  info['loads'] %}
+                {% if t['size'] > 0 %}
+                    base.add({{t['virtual_address']}}).writeByteArray(readFileData(sopath, {{t['size']}}, {{t['file_offset']}}));
+                {% endif %}
+            {% endfor %}
+        {% else %}
+            {% for t in  info['loads'] %}
+                {% if t['size'] > 0 %}
+                    /* {{ t['name'] }} */
+                    base.add({{t['virtual_address']}}).writeByteArray([{{t['content_ts']}}]);
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+
+            ////////////////////////////////////////////////////////////////////////////////
+            // handle relocation
+            {% for t in  info['patches'] %}{{t}}  
+            {% endfor %}
+
+            ////////////////////////////////////////////////////////////////////////////////
+        
+        {% if 'name' in info and info['name'] | length >0 %}
+            let name = '{{ info["name"]}}'; 
+        {% else %}
+            'name' is not in info with load mode
+        {% endif %}
+
+{% elif info['mode'] == 'get' %}
+    {% if 'name' in info and info['name'] | length >0 %}
+        get: (soname?:string, libs?: (MODINFO_BASETYPE|string)[], syms?:{[key:string]:NativePointer}):INFO_TYPE=>{
+            let name = '{{ info["name"]}}'; 
+            if(soname!=undefined) name = soname;
+    {% else %}
+        get: (soname:string, libs?: (MODINFO_BASETYPE|string)[], syms?:{[key:string]:NativePointer}):INFO_TYPE=>{
+            let name = soname;
+    {% endif %}
+            base = Process.getModuleByName(name).base;
+    {% endif %}
+        
+
+            const ___info:INFO_TYPE = {
+
+                name        : name,
+
+                base        : base,
+            {% if info['mode'] == 'load' %}
+                load_size   : {{ info['load_size'] }},
+            {% endif %}
+
+                symbols     : {
+                    {% for k, v in  info['symbols'].items() %}
+                        {% if 'offset' in v %}
+                            ["{{k}}"]: base.add({{v['offset']}}),{% else %}{{k}}: Module.findExportByName(name, '{{k}}') ?? resolveSymbol('{{k}}', libs, syms),
+                        {% endif %}
+                    {% endfor %}
+                },
+
+            };
+            return ___info;
+        },
+}
+

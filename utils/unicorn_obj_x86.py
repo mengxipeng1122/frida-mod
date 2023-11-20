@@ -89,8 +89,8 @@ def handle_relocation(uc, info, binary):
             int(lief.ELF.RELOCATION_i386.PC32),
             int(lief.ELF.RELOCATION_i386.PLT32),
         ]:
-            sym_section_addr = info['symbols'][relocation.symbol.name]['address']
-            uc.mem_write(reloc_addr, struct.pack('i', sym_section_addr-reloc_addr+c))
+            sym_addr = info['symbols'][relocation.symbol.name]['address']
+            uc.mem_write(reloc_addr, struct.pack('i', sym_addr-reloc_addr+c))
         elif relocation.type in [
             int(lief.ELF.RELOCATION_i386.GOTPC),
         ]:
@@ -122,7 +122,8 @@ def enumerate_obj_file(input_file):
     mu.mem_map(dummy_funcs_base, 0x10000000)
     dummy_symbols = {
         'printf' : dummy_funcs_base+0x50000,
-        'puts' : dummy_funcs_base+0x50010,
+        'puts' : dummy_funcs_base+0x50018,
+        '_frida_log' : dummy_funcs_base+0x50010,
     }
     for k, v in dummy_symbols.items():
         info['symbols'][k] = {'address':v, 'size':0}
@@ -132,7 +133,7 @@ def enumerate_obj_file(input_file):
     handle_relocation(mu, info, binary)
 
     # 
-    if False:
+    if True:
         print('dump assemble')
         for section in binary.sections:
             if section.name in info['sections']:
@@ -150,8 +151,6 @@ def enumerate_obj_file(input_file):
                 p = uc.reg_read(UC_X86_REG_EAX)
                 print('call ', k, hex(p),)
                 print( '         =>', get_uc_string(uc,p))
-
-
 
     def hook_block(uc, address, size, user_data):
         print('>>> Block started at 0x%x, size = 0x%x' %(address, size))
