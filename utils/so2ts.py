@@ -3,6 +3,9 @@
 
 # this python script try to convert a object file to a module for frida
 
+from packaging import version
+import pkg_resources  # part of setuptools
+
 import os
 import lief
 import argparse
@@ -207,11 +210,20 @@ def main():
     binary = lief.parse(args.binary)
     info['binary'] = binary
 
-    # Handle different binary formats
-    if binary.format == lief.EXE_FORMATS.PE:
-        info = handle_PE(info, binary, args.no_content)
-    elif binary.format == lief.EXE_FORMATS.ELF:
-        info = handle_ELF(info, binary, args.no_content)
+    installed_lief_version = pkg_resources.get_distribution("lief").version
+    print('installed lief version ', installed_lief_version)
+
+    if version.parse(installed_lief_version) < version.parse("0.14.0"):
+        # Handle different binary formats
+        if binary.format == lief.EXE_FORMATS.PE:
+            info = handle_PE(info, binary, args.no_content)
+        elif binary.format == lief.EXE_FORMATS.ELF:
+            info = handle_ELF(info, binary, args.no_content)
+    else:
+        if binary.format == lief.Binary.FORMATS.PE:
+            info = handle_PE(info, binary, args.no_content)
+        elif binary.format == lief.Binary.FORMATS.ELF:
+            info = handle_ELF(info, binary, args.no_content)
 
     # Get the path of the current module
     module_path = os.path.dirname(os.path.abspath(__file__))
